@@ -1,0 +1,1353 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// MULTI-TENANT CORE
+// ============================================================
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  taxId     String? // CUIT de la agencia
+  address   String?
+  city      String?
+  phone     String?
+  email     String?
+  logo      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users              User[]
+  clients            Client[]
+  providers          Provider[]
+  programs           Program[]
+  reservationOrigins ReservationOrigin[]
+  reservations       Reservation[]
+  costs              Cost[]
+  tariffs            Tariff[]
+  programTariffs     ProgramTariff[]
+  invoices           Invoice[]
+  receipts           Receipt[]
+  paymentOrders      PaymentOrder[]
+  checks             Check[]
+  currencyBills      CurrencyBill[]
+  dailyCashes        DailyCash[]
+  purchaseInvoices   PurchaseInvoice[]
+  vehicles           Vehicle[]
+  drivers            Driver[]
+  guides             Guide[]
+  transportCompanies TransportCompany[]
+  dailyTransfers     DailyTransfer[]
+  dailyExcursions    DailyExcursion[]
+  voucherTexts       VoucherText[]
+
+  // Parameter tables
+  serviceProviderTypes ServiceProviderType[]
+  providerOrigins      ProviderOrigin[]
+  clientTypes          ClientType[]
+  pensionRegimes       PensionRegime[]
+  roomTypes            RoomType[]
+  foodTypes            FoodType[]
+  excursionCodes       ExcursionCode[]
+  transferSegments     TransferSegment[]
+  ticketSegments       TicketSegment[]
+  guideTypes           GuideType[]
+
+  @@map("agencies")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  agencyId   String
+  supabaseId String   @unique // Supabase Auth UUID
+  name       String
+  email      String
+  role       UserRole @default(OPERATOR)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR_ADMIN
+  OPERATOR
+}
+
+// ============================================================
+// PARAMETER TABLES (configuración base del sistema)
+// ============================================================
+
+model ServiceProviderType {
+  id          String   @id @default(cuid())
+  agencyId    String
+  code        Int
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  agency    Agency     @relation(fields: [agencyId], references: [id])
+  providers Provider[]
+
+  @@unique([agencyId, code])
+  @@map("service_provider_types")
+}
+
+model ProviderOrigin {
+  id               String   @id @default(cuid())
+  agencyId         String
+  code             String
+  name             String
+  includeExcursion Boolean  @default(false) // Incluye en planilla excursiones
+  includeTransfer  Boolean  @default(false) // Incluye en planilla traslados
+  isForeign        Boolean  @default(false) // Servicios al exterior (No Computable IVA)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  agency    Agency     @relation(fields: [agencyId], references: [id])
+  providers Provider[]
+
+  @@unique([agencyId, code])
+  @@map("provider_origins")
+}
+
+model ClientType {
+  id       String  @id @default(cuid())
+  agencyId String
+  code     Int
+  name     String // Mayorista, Minorista, Representante, etc.
+  active   Boolean @default(true)
+
+  agency  Agency   @relation(fields: [agencyId], references: [id])
+  clients Client[]
+
+  @@unique([agencyId, code])
+  @@map("client_types")
+}
+
+model PensionRegime {
+  id           String @id @default(cuid())
+  agencyId     String
+  code         String
+  name         String // Alojamiento con Desayuno
+  abbreviation String // DB
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("pension_regimes")
+}
+
+model RoomType {
+  id                  String  @id @default(cuid())
+  agencyId            String
+  code                String
+  name                String // DOBLE MATRIMONIAL
+  abbreviation        String // DBLM
+  capacity            Int // max pax
+  isVoucherComplement Boolean @default(false) // complemento (cuna, etc.)
+  active              Boolean @default(true)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("room_types")
+}
+
+model FoodType {
+  id       String  @id @default(cuid())
+  agencyId String
+  code     String
+  name     String // Almuerzo, Cena, Desayuno
+  active   Boolean @default(true)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("food_types")
+}
+
+model ExcursionCode {
+  id          String  @id @default(cuid())
+  agencyId    String
+  code        String
+  name        String // CIUDAD & ALREDEDORES
+  isLocal     Boolean @default(true)
+  isPrivate   Boolean @default(false)
+  isFullDay   Boolean @default(false)
+  isTaxable   Boolean @default(true) // Gravado transporte
+  days        String? // días de salida: LUN,MAR,MIE...
+  activity    String?
+  locality    String?
+  distance    String?
+  duration    String?
+  description String?
+  active      Boolean @default(true)
+
+  agency              Agency                @relation(fields: [agencyId], references: [id])
+  excursionHotelOrder ExcursionHotelOrder[]
+
+  @@unique([agencyId, code])
+  @@map("excursion_codes")
+}
+
+model ExcursionHotelOrder {
+  id              String @id @default(cuid())
+  excursionCodeId String
+  providerId      String
+  order           Int
+
+  excursionCode ExcursionCode @relation(fields: [excursionCodeId], references: [id])
+  provider      Provider      @relation(fields: [providerId], references: [id])
+
+  @@unique([excursionCodeId, order])
+  @@map("excursion_hotel_orders")
+}
+
+model TransferSegment {
+  id       String       @id @default(cuid())
+  agencyId String
+  code     String
+  name     String // AEP-HTL (MDZ)
+  isLocal  Boolean      @default(true)
+  type     TransferType @default(ENTRADA)
+  active   Boolean      @default(true)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("transfer_segments")
+}
+
+enum TransferType {
+  ENTRADA
+  SALIDA
+  CENA_SHOW
+  CONEXION
+  ASISTENCIA
+}
+
+model TicketSegment {
+  id       String     @id @default(cuid())
+  agencyId String
+  code     String
+  name     String // MDZ/BUE/MDZ
+  type     TicketType @default(AEREO)
+  active   Boolean    @default(true)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("ticket_segments")
+}
+
+enum TicketType {
+  AEREO
+  TERRESTRE
+  FLUVIAL_MARITIMO
+}
+
+model GuideType {
+  id          String  @id @default(cuid())
+  agencyId    String
+  code        String
+  name        String
+  isBilingual Boolean @default(false)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("guide_types")
+}
+
+model VoucherText {
+  id         String  @id @default(cuid())
+  agencyId   String
+  code       Int
+  label      String // etiqueta identificatoria
+  text       String // texto del voucher
+  providerId String?
+  chargedTo  String? // "Con Cargo a:"
+
+  agency   Agency    @relation(fields: [agencyId], references: [id])
+  provider Provider? @relation(fields: [providerId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("voucher_texts")
+}
+
+model ReservationOrigin {
+  id         String  @id @default(cuid())
+  agencyId   String
+  letter     String // M, B, S...
+  label      String // Mendoza, Buenos Aires, Chile
+  clientId   String? // agencia que genera reservas de este origen
+  autoNumber Boolean @default(true)
+  lastNumber Int     @default(0)
+
+  agency Agency  @relation(fields: [agencyId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id])
+
+  @@unique([agencyId, letter])
+  @@map("reservation_origins")
+}
+
+// ============================================================
+// CLIENTS (Agencias y pasajeros directos)
+// ============================================================
+
+model Client {
+  id               String       @id @default(cuid())
+  agencyId         String
+  code             Int
+  fantasyName      String
+  legalName        String?
+  clientTypeId     String?
+  address          String?
+  city             String?
+  zone             String? // BUE, MDZ, COR (código aeropuerto)
+  phone            String?
+  email            String?
+  taxId            String? // CUIT
+  taxPosition      TaxPosition? // RI, MO, CF, EX
+  isDirect         Boolean      @default(false) // Cliente directo (no agencia)
+  hasCreditAccount Boolean      @default(false)
+  creditLimit      Decimal?     @db.Decimal(12, 2)
+  creditLimitUsd   Decimal?     @db.Decimal(12, 2)
+  commission       Decimal?     @db.Decimal(5, 2) // porcentaje
+  notes            String?
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  agency                 Agency                  @relation(fields: [agencyId], references: [id])
+  clientType             ClientType?             @relation(fields: [clientTypeId], references: [id])
+  reservationOrigins     ReservationOrigin[]
+  reservations           Reservation[]
+  invoices               Invoice[]
+  receipts               Receipt[]
+  clientAccountMovements ClientAccountMovement[]
+
+  @@unique([agencyId, code])
+  @@map("clients")
+}
+
+enum TaxPosition {
+  RI // Responsable Inscripto
+  MO // Monotributista
+  CF // Consumidor Final
+  EX // Exento
+  NC // No Categorizado
+}
+
+// ============================================================
+// PROVIDERS (Prestadores y Proveedores)
+// ============================================================
+
+model Provider {
+  id                 String       @id @default(cuid())
+  agencyId           String
+  code               Int
+  fantasyName        String
+  legalName          String?
+  typeId             String?
+  originId           String?
+  address            String?
+  city               String?
+  phone              String?
+  email              String?
+  taxId              String? // CUIT
+  taxPosition        TaxPosition?
+  category           String? // categoría hotel (1-5 estrellas)
+  isSupplier         Boolean      @default(false) // proveedor vs prestador
+  sendVoucherByEmail Boolean      @default(false)
+  additionalInfo     String?
+  creditLimit        Decimal?     @db.Decimal(12, 2)
+  active             Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  agency                    Agency                     @relation(fields: [agencyId], references: [id])
+  serviceProviderType       ServiceProviderType?       @relation(fields: [typeId], references: [id])
+  origin                    ProviderOrigin?            @relation(fields: [originId], references: [id])
+  excursionHotelOrders      ExcursionHotelOrder[]
+  voucherTexts              VoucherText[]
+  costs                     Cost[]
+  tariffs                   Tariff[]
+  paymentOrders             PaymentOrder[]
+  purchaseInvoices          PurchaseInvoice[]
+  providerAccountMovements  ProviderAccountMovement[]
+  vehicles                  Vehicle[]
+  programHotels             ProgramHotel[]
+  programMeals              ProgramMeal[]
+  programExcursions         ProgramExcursion[]
+  programTransfers          ProgramTransfer[]
+  programTickets            ProgramTicket[]
+  programRentals            ProgramRental[]
+  programMiscs              ProgramMisc[]
+  reservationAccommodations ReservationAccommodation[]
+  reservationMeals          ReservationMeal[]
+  reservationExcursions     ReservationExcursion[]
+  reservationTransfers      ReservationTransfer[]
+  reservationTickets        ReservationTicket[]
+  reservationRentals        ReservationRental[]
+  reservationMiscs          ReservationMisc[]
+
+  @@unique([agencyId, code])
+  @@map("providers")
+}
+
+// ============================================================
+// PROGRAMS / ITINERARIES (Paquetes turísticos)
+// ============================================================
+
+model Program {
+  id          String   @id @default(cuid())
+  agencyId    String
+  code        Int
+  name        String // MENDOZA CLASICO
+  isFixedBase Boolean  @default(true) // fijo vs variable
+  days        Int?
+  nights      Int?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  agency            Agency             @relation(fields: [agencyId], references: [id])
+  programHotels     ProgramHotel[]
+  programMeals      ProgramMeal[]
+  programExcursions ProgramExcursion[]
+  programTransfers  ProgramTransfer[]
+  programTickets    ProgramTicket[]
+  programRentals    ProgramRental[]
+  programMiscs      ProgramMisc[]
+  programTariffs    ProgramTariff[]
+  reservations      Reservation[]
+
+  @@unique([agencyId, code])
+  @@map("programs")
+}
+
+model ProgramHotel {
+  id         String  @id @default(cuid())
+  programId  String
+  providerId String
+  regime     String? // pensión
+  nights     Int     @default(1)
+  order      Int     @default(0)
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_hotels")
+}
+
+model ProgramMeal {
+  id         String  @id @default(cuid())
+  programId  String
+  providerId String
+  foodTypeId String?
+  quantity   Int     @default(1)
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_meals")
+}
+
+model ProgramExcursion {
+  id              String  @id @default(cuid())
+  programId       String
+  providerId      String
+  excursionCodeId String?
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_excursions")
+}
+
+model ProgramTransfer {
+  id                String  @id @default(cuid())
+  programId         String
+  providerId        String
+  transferSegmentId String?
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_transfers")
+}
+
+model ProgramTicket {
+  id              String  @id @default(cuid())
+  programId       String
+  providerId      String
+  ticketSegmentId String?
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_tickets")
+}
+
+model ProgramRental {
+  id          String  @id @default(cuid())
+  programId   String
+  providerId  String
+  description String?
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_rentals")
+}
+
+model ProgramMisc {
+  id          String  @id @default(cuid())
+  programId   String
+  providerId  String
+  description String?
+
+  program  Program  @relation(fields: [programId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("program_miscs")
+}
+
+// ============================================================
+// RESERVATIONS (Módulo core)
+// ============================================================
+
+model Reservation {
+  id          String            @id @default(cuid())
+  agencyId    String
+  origin      String // letra: M, B, S...
+  number      String // número de reserva
+  clientId    String?
+  programId   String?
+  programCode Int? // snapshot del código de programa
+  status      ReservationStatus @default(TENTATIVE)
+
+  // Pasajeros
+  leadPax String // nombre titular
+  adults  Int    @default(1)
+  minors  Int    @default(0)
+  free    Int    @default(0)
+
+  // Fechas
+  checkIn   DateTime?
+  checkOut  DateTime?
+  inMedium  String? // medio de entrada (vuelo, bus, etc.)
+  inTime    String? // horario HH:MM
+  outMedium String?
+  outTime   String?
+
+  // Expiración
+  expiresAt DateTime?
+
+  // Admin
+  currency               Currency @default(PESOS)
+  commission             Decimal? @db.Decimal(5, 2)
+  isFixedCommission      Boolean  @default(true)
+  totalAmount            Decimal? @db.Decimal(12, 2)
+  taxableAmount          Decimal? @db.Decimal(12, 2) // Gravado
+  nonComputedAmount      Decimal? @db.Decimal(12, 2) // No Computable
+  exemptAmount           Decimal? @db.Decimal(12, 2) // Exento
+  transportTaxableAmount Decimal? @db.Decimal(12, 2) // Gravado Transporte
+  vatGeneral             Decimal? @db.Decimal(12, 2) // IVA 21%
+  vatTransport           Decimal? @db.Decimal(12, 2) // IVA 10.5%
+  taxes                  Decimal? @db.Decimal(12, 2) // Impuestos
+  agencyCommissionAmount Decimal? @db.Decimal(12, 2)
+  netAmount              Decimal? @db.Decimal(12, 2)
+  totalInvoice           Decimal? @db.Decimal(12, 2)
+
+  notes       String? // antecedentes/historial
+  cancelledAt DateTime?
+  confirmedAt DateTime?
+  confirmedBy String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String?
+  updatedBy   String?
+
+  agency  Agency   @relation(fields: [agencyId], references: [id])
+  client  Client?  @relation(fields: [clientId], references: [id])
+  program Program? @relation(fields: [programId], references: [id])
+
+  passengers     ReservationPassenger[]
+  accommodations ReservationAccommodation[]
+  meals          ReservationMeal[]
+  excursions     ReservationExcursion[]
+  transfers      ReservationTransfer[]
+  tickets        ReservationTicket[]
+  rentals        ReservationRental[]
+  miscs          ReservationMisc[]
+  invoices       Invoice[]
+  receipts       Receipt[]
+
+  @@unique([agencyId, origin, number])
+  @@map("reservations")
+}
+
+enum ReservationStatus {
+  TENTATIVE
+  CONFIRMED
+  CANCELLED
+  INVOICED
+  VOUCHERS_ISSUED
+}
+
+enum Currency {
+  PESOS
+  USD
+}
+
+model ReservationPassenger {
+  id            String    @id @default(cuid())
+  reservationId String
+  name          String
+  docType       String?
+  docNumber     String?
+  birthDate     DateTime?
+  nationality   String?
+  occupation    String?
+  order         Int       @default(0)
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+
+  @@map("reservation_passengers")
+}
+
+model ReservationAccommodation {
+  id            String    @id @default(cuid())
+  reservationId String
+  providerId    String
+  checkIn       DateTime
+  checkOut      DateTime
+  regime        String? // pensión
+  confirmedWith String? // nombre confirmación en hotel
+  confirmedAt   DateTime?
+
+  reservation Reservation       @relation(fields: [reservationId], references: [id])
+  provider    Provider          @relation(fields: [providerId], references: [id])
+  rooms       ReservationRoom[]
+
+  @@map("reservation_accommodations")
+}
+
+model ReservationRoom {
+  id              String  @id @default(cuid())
+  accommodationId String
+  roomTypeId      String?
+  quantity        Int     @default(1)
+  isCommunicating Boolean @default(false)
+  isFree          Boolean @default(false)
+
+  accommodation ReservationAccommodation @relation(fields: [accommodationId], references: [id])
+
+  @@map("reservation_rooms")
+}
+
+model ReservationMeal {
+  id             String    @id @default(cuid())
+  reservationId  String
+  providerId     String
+  foodTypeId     String?
+  quantity       Int       @default(1)
+  quantityPerPax Int       @default(1)
+  date           DateTime?
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@map("reservation_meals")
+}
+
+model ReservationExcursion {
+  id               String   @id @default(cuid())
+  reservationId    String
+  providerId       String
+  excursionCodeId  String?
+  date             DateTime
+  time             String? // HH:MM
+  pickupProviderId String? // hotel de búsqueda
+  pickupOther      String? // otro lugar
+  guideType        String? // Castellano, Inglés, etc.
+  isPrivate        Boolean  @default(false)
+  paxCount         Int      @default(1)
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@map("reservation_excursions")
+}
+
+model ReservationTransfer {
+  id                String   @id @default(cuid())
+  reservationId     String
+  providerId        String
+  transferSegmentId String?
+  date              DateTime
+  time              String?
+  medium            String? // vuelo, bus, etc.
+  pickupProviderId  String?
+  pickupOther       String?
+  guideType         String?
+  isPrivate         Boolean  @default(false)
+  paxCount          Int      @default(1)
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@map("reservation_transfers")
+}
+
+model ReservationTicket {
+  id              String        @id @default(cuid())
+  reservationId   String
+  providerId      String
+  ticketSegmentId String?
+  date            DateTime
+  passengerName   String?
+  passengerType   PassengerType @default(ADULT)
+  ticketNumber    String?
+  issuedAt        DateTime?
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@map("reservation_tickets")
+}
+
+enum PassengerType {
+  ADULT
+  CHILD
+  INFANT
+}
+
+model ReservationRental {
+  id            String    @id @default(cuid())
+  reservationId String
+  providerId    String
+  vehicleDesc   String?
+  pickupAt      DateTime?
+  pickupTime    String?
+  pickupPlace   String?
+  pickupMedium  String?
+  dropoffAt     DateTime?
+  dropoffTime   String?
+  dropoffPlace  String?
+  dropoffMedium String?
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@map("reservation_rentals")
+}
+
+model ReservationMisc {
+  id            String     @id @default(cuid())
+  reservationId String
+  providerId    String
+  description   String
+  vatType       VatConcept @default(GRAVADO)
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@map("reservation_miscs")
+}
+
+enum VatConcept {
+  GRAVADO
+  GRAVADO_TRANSPORTE
+  NO_COMPUTABLE
+  EXENTO
+  IMPUESTOS
+}
+
+// ============================================================
+// COSTS & TARIFFS
+// ============================================================
+
+model Cost {
+  id          String          @id @default(cuid())
+  agencyId    String
+  providerId  String
+  validFrom   DateTime
+  validTo     DateTime
+  currency    Currency        @default(PESOS)
+  serviceType CostServiceType
+  details     Json // flexible: régimen, tipo hab, rango pax, importe
+
+  agency   Agency   @relation(fields: [agencyId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("costs")
+}
+
+model Tariff {
+  id          String          @id @default(cuid())
+  agencyId    String
+  providerId  String
+  validFrom   DateTime
+  validTo     DateTime
+  currency    Currency        @default(PESOS)
+  serviceType CostServiceType
+  details     Json // flexible: régimen, tipo hab, rango pax, importe
+
+  agency   Agency   @relation(fields: [agencyId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@map("tariffs")
+}
+
+enum CostServiceType {
+  HOTEL
+  MEAL
+  EXCURSION
+  TRANSFER
+  TICKET
+  RENTAL
+  MISC
+}
+
+model ProgramTariff {
+  id               String        @id @default(cuid())
+  agencyId         String
+  programId        String
+  medium           ProgramMedium @default(SIN_TRANSPORTE)
+  validFrom        DateTime
+  validTo          DateTime
+  currency         Currency      @default(PESOS)
+  transportTaxable Decimal?      @db.Decimal(12, 2)
+  exempt           Decimal?      @db.Decimal(12, 2)
+  taxes            Decimal?      @db.Decimal(12, 2)
+  details          Json // por hotel/habitacion/rango pax -> tarifa global
+
+  agency  Agency  @relation(fields: [agencyId], references: [id])
+  program Program @relation(fields: [programId], references: [id])
+
+  @@map("program_tariffs")
+}
+
+enum ProgramMedium {
+  SIN_TRANSPORTE
+  CON_BUS
+  CON_AEREO
+}
+
+// ============================================================
+// INVOICING (Facturación)
+// ============================================================
+
+model Invoice {
+  id               String      @id @default(cuid())
+  agencyId         String
+  reservationId    String?
+  clientId         String
+  type             InvoiceType @default(FA)
+  salePoint        Int         @default(1)
+  number           Int
+  date             DateTime
+  currency         Currency    @default(PESOS)
+  exchangeRate     Decimal?    @db.Decimal(10, 4)
+  taxableAmount    Decimal     @default(0) @db.Decimal(12, 2)
+  transportTaxable Decimal     @default(0) @db.Decimal(12, 2)
+  nonComputed      Decimal     @default(0) @db.Decimal(12, 2)
+  exempt           Decimal     @default(0) @db.Decimal(12, 2)
+  vatGeneral       Decimal     @default(0) @db.Decimal(12, 2)
+  vatTransport     Decimal     @default(0) @db.Decimal(12, 2)
+  taxes            Decimal     @default(0) @db.Decimal(12, 2)
+  total            Decimal     @default(0) @db.Decimal(12, 2)
+  balance          Decimal     @default(0) @db.Decimal(12, 2) // saldo pendiente
+  isVoided         Boolean     @default(false)
+  voidedAt         DateTime?
+  creditNoteFor    String? // invoice.id al que referencia la NC
+  createdAt        DateTime    @default(now())
+  createdBy        String?
+
+  agency       Agency        @relation(fields: [agencyId], references: [id])
+  reservation  Reservation?  @relation(fields: [reservationId], references: [id])
+  client       Client        @relation(fields: [clientId], references: [id])
+  items        InvoiceItem[]
+  receiptItems ReceiptItem[]
+
+  @@unique([agencyId, salePoint, type, number])
+  @@map("invoices")
+}
+
+enum InvoiceType {
+  FA // Factura
+  ND // Nota de Débito
+  NC // Nota de Crédito
+}
+
+model InvoiceItem {
+  id          String     @id @default(cuid())
+  invoiceId   String
+  description String
+  vatConcept  VatConcept @default(GRAVADO)
+  amount      Decimal    @db.Decimal(12, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("invoice_items")
+}
+
+// ============================================================
+// RECEIPTS (Recibos)
+// ============================================================
+
+model Receipt {
+  id            String   @id @default(cuid())
+  agencyId      String
+  reservationId String?
+  clientId      String
+  number        Int
+  date          DateTime
+  currency      Currency @default(PESOS)
+  exchangeRate  Decimal? @db.Decimal(10, 4)
+  totalAmount   Decimal  @db.Decimal(12, 2)
+  cashAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  checkAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  origin        String? // sector de origen
+  createdAt     DateTime @default(now())
+  createdBy     String?
+
+  agency                 Agency                  @relation(fields: [agencyId], references: [id])
+  reservation            Reservation?            @relation(fields: [reservationId], references: [id])
+  client                 Client                  @relation(fields: [clientId], references: [id])
+  items                  ReceiptItem[]
+  checks                 Check[]
+  currencyBills          CurrencyBill[]
+  clientAccountMovements ClientAccountMovement[]
+
+  @@map("receipts")
+}
+
+model ReceiptItem {
+  id        String   @id @default(cuid())
+  receiptId String
+  invoiceId String
+  amount    Decimal  @db.Decimal(12, 2)
+  currency  Currency @default(PESOS)
+
+  receipt Receipt @relation(fields: [receiptId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("receipt_items")
+}
+
+// ============================================================
+// PAYMENT ORDERS (Órdenes de Pago)
+// ============================================================
+
+model PaymentOrder {
+  id            String        @id @default(cuid())
+  agencyId      String
+  providerId    String
+  number        Int
+  date          DateTime
+  currency      Currency      @default(PESOS)
+  exchangeRate  Decimal?      @db.Decimal(10, 4)
+  paymentMethod PaymentMethod @default(EFECTIVO)
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  cashAmount    Decimal       @default(0) @db.Decimal(12, 2)
+  checkAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  concept       String?
+  origin        String?
+  createdAt     DateTime      @default(now())
+  createdBy     String?
+
+  agency                   Agency                    @relation(fields: [agencyId], references: [id])
+  provider                 Provider                  @relation(fields: [providerId], references: [id])
+  items                    PaymentOrderItem[]
+  checks                   Check[]
+  providerAccountMovements ProviderAccountMovement[]
+
+  @@map("payment_orders")
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  CHEQUES
+  MIXTO
+}
+
+model PaymentOrderItem {
+  id                String   @id @default(cuid())
+  paymentOrderId    String
+  purchaseInvoiceId String
+  amount            Decimal  @db.Decimal(12, 2)
+  currency          Currency @default(PESOS)
+
+  paymentOrder    PaymentOrder    @relation(fields: [paymentOrderId], references: [id])
+  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id])
+
+  @@map("payment_order_items")
+}
+
+// ============================================================
+// CHECKS (Cheques)
+// ============================================================
+
+model Check {
+  id             String    @id @default(cuid())
+  agencyId       String
+  number         String
+  bank           String?
+  accountNumber  String?
+  issuedAt       DateTime?
+  deferredDate   DateTime? // fecha de cobro (diferido)
+  drawer         String? // librador
+  beneficiary    String? // beneficiario
+  amount         Decimal   @db.Decimal(12, 2)
+  isOwn          Boolean   @default(false) // cheque propio
+  inPortfolio    Boolean   @default(true)
+  receivedAt     DateTime?
+  sentAt         DateTime? // fecha de salida
+  receiptId      String?
+  paymentOrderId String?
+
+  agency       Agency        @relation(fields: [agencyId], references: [id])
+  receipt      Receipt?      @relation(fields: [receiptId], references: [id])
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+
+  @@map("checks")
+}
+
+// ============================================================
+// CURRENCY BILLS (Billetes moneda extranjera)
+// ============================================================
+
+model CurrencyBill {
+  id           String    @id @default(cuid())
+  agencyId     String
+  currency     Currency  @default(USD)
+  serialNumber String
+  amount       Decimal   @db.Decimal(12, 2)
+  clientId     String?
+  deliveredBy  String?
+  receivedAt   DateTime?
+  receiptId    String?
+
+  agency  Agency   @relation(fields: [agencyId], references: [id])
+  receipt Receipt? @relation(fields: [receiptId], references: [id])
+
+  @@map("currency_bills")
+}
+
+// ============================================================
+// DAILY CASH (Cajas Diarias)
+// ============================================================
+
+model DailyCash {
+  id        String          @id @default(cuid())
+  agencyId  String
+  date      DateTime
+  number    Int
+  currency  Currency        @default(PESOS)
+  status    DailyCashStatus @default(OPEN)
+  totalIn   Decimal         @default(0) @db.Decimal(12, 2)
+  totalOut  Decimal         @default(0) @db.Decimal(12, 2)
+  closedAt  DateTime?
+  closedBy  String?
+  createdAt DateTime        @default(now())
+
+  agency       Agency            @relation(fields: [agencyId], references: [id])
+  transactions CashTransaction[]
+
+  @@unique([agencyId, date, currency])
+  @@map("daily_cashes")
+}
+
+enum DailyCashStatus {
+  PENDING
+  OPEN
+  CLOSED
+}
+
+model CashTransaction {
+  id            String        @id @default(cuid())
+  dailyCashId   String
+  direction     CashDirection
+  origin        String // Facturación, AdminCobranza, etc.
+  voucherType   String // Factura, Recibo, OP, etc.
+  voucherNumber String?
+  amount        Decimal       @db.Decimal(12, 2)
+  description   String?
+  accountEntry  String? // imputación contable
+  sourceId      String? // id del comprobante origen
+  createdAt     DateTime      @default(now())
+
+  dailyCash DailyCash @relation(fields: [dailyCashId], references: [id])
+
+  @@map("cash_transactions")
+}
+
+enum CashDirection {
+  IN
+  OUT
+}
+
+// ============================================================
+// PURCHASE INVOICES (Facturas de Compra / IVA Compras)
+// ============================================================
+
+model PurchaseInvoice {
+  id              String       @id @default(cuid())
+  agencyId        String
+  providerId      String?
+  providerName    String? // para proveedores eventuales
+  providerTaxId   String?
+  providerTaxPos  TaxPosition?
+  providerAddress String?
+  type            InvoiceType  @default(FA)
+  number          String
+  date            DateTime
+  currency        Currency     @default(PESOS)
+  exchangeRate    Decimal?     @db.Decimal(10, 4)
+  taxable         Decimal      @default(0) @db.Decimal(12, 2)
+  nonComputed     Decimal      @default(0) @db.Decimal(12, 2)
+  exempt          Decimal      @default(0) @db.Decimal(12, 2)
+  vat             Decimal      @default(0) @db.Decimal(12, 2)
+  taxes           Decimal      @default(0) @db.Decimal(12, 2)
+  total           Decimal      @default(0) @db.Decimal(12, 2)
+  balance         Decimal      @default(0) @db.Decimal(12, 2)
+  isVoided        Boolean      @default(false)
+  reservationId   String?
+  createdAt       DateTime     @default(now())
+
+  agency       Agency             @relation(fields: [agencyId], references: [id])
+  provider     Provider?          @relation(fields: [providerId], references: [id])
+  paymentItems PaymentOrderItem[]
+
+  @@map("purchase_invoices")
+}
+
+// ============================================================
+// ACCOUNTS (Cuentas Corrientes)
+// ============================================================
+
+model ClientAccountMovement {
+  id            String         @id @default(cuid())
+  agencyId      String
+  clientId      String
+  reservationId String?
+  date          DateTime
+  type          AccountMovType
+  voucherType   String
+  voucherNumber String?
+  currency      Currency       @default(PESOS)
+  debit         Decimal        @default(0) @db.Decimal(12, 2)
+  credit        Decimal        @default(0) @db.Decimal(12, 2)
+  balance       Decimal        @default(0) @db.Decimal(12, 2)
+  receiptId     String?
+  invoiceId     String?
+  createdAt     DateTime       @default(now())
+
+  client  Client   @relation(fields: [clientId], references: [id])
+  receipt Receipt? @relation(fields: [receiptId], references: [id])
+
+  @@map("client_account_movements")
+}
+
+model ProviderAccountMovement {
+  id             String         @id @default(cuid())
+  agencyId       String
+  providerId     String
+  reservationId  String?
+  date           DateTime
+  type           AccountMovType
+  voucherType    String
+  voucherNumber  String?
+  currency       Currency       @default(PESOS)
+  debit          Decimal        @default(0) @db.Decimal(12, 2)
+  credit         Decimal        @default(0) @db.Decimal(12, 2)
+  balance        Decimal        @default(0) @db.Decimal(12, 2)
+  paymentOrderId String?
+  createdAt      DateTime       @default(now())
+
+  provider     Provider      @relation(fields: [providerId], references: [id])
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+
+  @@map("provider_account_movements")
+}
+
+enum AccountMovType {
+  DEBIT
+  CREDIT
+}
+
+// ============================================================
+// RECEPTIVO (Transporte)
+// ============================================================
+
+model Vehicle {
+  id           String  @id @default(cuid())
+  agencyId     String
+  code         Int
+  description  String // MINIBUS 1
+  providerId   String? // propietario (si es de tercero)
+  isOwn        Boolean @default(true)
+  plate        String? // dominio/matricula
+  internalCode String?
+  seats        Int?
+  active       Boolean @default(true)
+  notes        String?
+
+  agency               Agency                  @relation(fields: [agencyId], references: [id])
+  provider             Provider?               @relation(fields: [providerId], references: [id])
+  expiries             VehicleExpiry[]
+  excursionAssignments DailyExcursionVehicle[]
+
+  @@unique([agencyId, code])
+  @@map("vehicles")
+}
+
+model VehicleExpiry {
+  id        String   @id @default(cuid())
+  vehicleId String
+  concept   String // PERMISO NACIONAL, TÉCNICA PROVINCIAL, etc.
+  expiresAt DateTime
+  alertDays Int      @default(30)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@map("vehicle_expiries")
+}
+
+model Driver {
+  id          String    @id @default(cuid())
+  agencyId    String
+  code        Int
+  name        String
+  address     String?
+  city        String?
+  phone       String?
+  taxId       String? // CUIL
+  birthDate   DateTime?
+  nationality String?
+  docType     String?
+  docNumber   String?
+  gender      String?
+  isOwn       Boolean   @default(true)
+  active      Boolean   @default(true)
+
+  agency   Agency         @relation(fields: [agencyId], references: [id])
+  expiries DriverExpiry[]
+
+  @@unique([agencyId, code])
+  @@map("drivers")
+}
+
+model DriverExpiry {
+  id        String   @id @default(cuid())
+  driverId  String
+  concept   String // CARNET NACIONAL, SEGURO TRABAJO, etc.
+  expiresAt DateTime
+  alertDays Int      @default(30)
+
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@map("driver_expiries")
+}
+
+model Guide {
+  id          String    @id @default(cuid())
+  agencyId    String
+  code        Int
+  name        String
+  address     String?
+  city        String?
+  phone       String?
+  taxId       String? // CUIL
+  birthDate   DateTime?
+  nationality String?
+  docType     String?
+  docNumber   String?
+  gender      String?
+  languages   String[] // ["Castellano", "Inglés", "Portugués"]
+  active      Boolean   @default(true)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, code])
+  @@map("guides")
+}
+
+model TransportCompany {
+  id         String  @id @default(cuid())
+  agencyId   String
+  code       Int
+  name       String
+  legalName  String?
+  authNumber String? // Resolución de Transporte
+  address    String?
+  phone      String?
+  agencyLink String?
+  fileNumber String?
+  active     Boolean @default(true)
+
+  agency          Agency                  @relation(fields: [agencyId], references: [id])
+  dailyExcursions DailyExcursionVehicle[]
+
+  @@unique([agencyId, code])
+  @@map("transport_companies")
+}
+
+model DailyTransfer {
+  id       String       @id @default(cuid())
+  agencyId String
+  date     DateTime
+  type     TransferType
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@map("daily_transfers")
+}
+
+model DailyExcursion {
+  id              String   @id @default(cuid())
+  agencyId        String
+  date            DateTime
+  excursionCodeId String?
+  time            String? // HH:MM horario de salida
+  comments        String?
+
+  agency   Agency                  @relation(fields: [agencyId], references: [id])
+  vehicles DailyExcursionVehicle[]
+
+  @@map("daily_excursions")
+}
+
+model DailyExcursionVehicle {
+  id                 String  @id @default(cuid())
+  dailyExcursionId   String
+  vehicleId          String?
+  driverId           String?
+  guideId            String?
+  transportCompanyId String?
+  copies             Int     @default(1)
+
+  dailyExcursion   DailyExcursion    @relation(fields: [dailyExcursionId], references: [id])
+  vehicle          Vehicle?          @relation(fields: [vehicleId], references: [id])
+  transportCompany TransportCompany? @relation(fields: [transportCompanyId], references: [id])
+
+  @@map("daily_excursion_vehicles")
+}
