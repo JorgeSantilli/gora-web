@@ -34,10 +34,10 @@ Sistema original operativo en Mendoza, Argentina. Empresa: GORA Turismo.
 ## Estado de desarrollo — Módulos
 1. ✅ **Foundation** — auth, multi-tenant, RBAC, layout, sidebar, login
 2. ✅ **Parámetros** — CRUD 8 tablas de configuración base
-3. Clientes — agencias y pasajeros directos
-4. 🚧 **Prestadores** — hoteles, restaurants, transportes, proveedores ← EN DESARROLLO
-5. Programas/Itinerarios — paquetes turísticos
-6. Reservas — módulo core (más complejo)
+3. ✅ **Prestadores** — hoteles, restaurants, transportes, proveedores
+4. ✅ **Clientes** — agencias y pasajeros directos
+5. ✅ **Programas/Itinerarios** — paquetes turísticos con 7 tipos de servicio
+6. ✅ **Reservas** — módulo core completo (encabezado + 8 tipos de servicio + importes fiscales + estados)
 7. Tarifas y Costos
 8. Facturación — facturas A/B, ND, NC con IVA ARCA
 9. Ingreso de Valores — recibos, cheques, billetes
