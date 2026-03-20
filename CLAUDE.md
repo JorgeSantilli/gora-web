@@ -38,7 +38,7 @@ Sistema original operativo en Mendoza, Argentina. Empresa: GORA Turismo.
 4. ✅ **Clientes** — agencias y pasajeros directos
 5. ✅ **Programas/Itinerarios** — paquetes turísticos con 7 tipos de servicio
 6. ✅ **Reservas** — módulo core completo (encabezado + 8 tipos de servicio + importes fiscales + estados)
-7. Tarifas y Costos
+7. 🚧 **Tarifas y Costos** — próximo módulo a desarrollar
 8. Facturación — facturas A/B, ND, NC con IVA ARCA
 9. Ingreso de Valores — recibos, cheques, billetes
 10. Órdenes de Pago
