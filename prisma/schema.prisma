@@ -16,15 +16,16 @@ model Agency {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
-  taxId     String? // CUIT de la agencia
-  address   String?
-  city      String?
-  phone     String?
-  email     String?
-  logo      String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  taxId       String? // CUIT: 20-12345678-0
+  taxPosition TaxPosition @default(RI)
+  address     String?
+  city        String?
+  phone       String?
+  email       String?
+  logo        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
   users              User[]
@@ -36,6 +37,8 @@ model Agency {
   costs              Cost[]
   tariffs            Tariff[]
   programTariffs     ProgramTariff[]
+  salePoints         SalePoint[]
+  invoiceSequences   InvoiceSequence[]
   invoices           Invoice[]
   receipts           Receipt[]
   paymentOrders      PaymentOrder[]
@@ -853,42 +856,100 @@ enum ProgramMedium {
 }
 
 // ============================================================
+// SALE POINTS (Puntos de Venta — multi-tenant, multi-PV)
+// ============================================================
+
+model SalePoint {
+  id       String  @id @default(cuid())
+  agencyId String
+  number   Int     // número de PV ARCA (1–9999)
+  name     String? // descripción opcional
+  active   Boolean @default(true)
+
+  agency    Agency            @relation(fields: [agencyId], references: [id])
+  sequences InvoiceSequence[]
+  invoices  Invoice[]
+
+  @@unique([agencyId, number])
+  @@map("sale_points")
+}
+
+// Secuencia atómica por PV + Letra + Tipo (evita duplicados de numeración)
+model InvoiceSequence {
+  id          String        @id @default(cuid())
+  agencyId    String
+  salePointId String
+  letter      InvoiceLetter // A o B
+  type        InvoiceType   // FA, ND, NC
+  lastNumber  Int           @default(0)
+
+  agency    Agency    @relation(fields: [agencyId], references: [id])
+  salePoint SalePoint @relation(fields: [salePointId], references: [id])
+
+  @@unique([salePointId, letter, type])
+  @@map("invoice_sequences")
+}
+
+// ============================================================
 // INVOICING (Facturación)
 // ============================================================
 
 model Invoice {
-  id               String      @id @default(cuid())
+  id               String             @id @default(cuid())
   agencyId         String
   reservationId    String?
   clientId         String
-  type             InvoiceType @default(FA)
-  salePoint        Int         @default(1)
+  salePointId      String
+  salePoint        Int                // snapshot del número de PV (para display histórico)
+  letter           InvoiceLetter      @default(B) // A (RI→RI) | B (RI→CF/MO/EX)
+  type             InvoiceType        @default(FA)
   number           Int
   date             DateTime
-  currency         Currency    @default(PESOS)
-  exchangeRate     Decimal?    @db.Decimal(10, 4)
-  taxableAmount    Decimal     @default(0) @db.Decimal(12, 2)
-  transportTaxable Decimal     @default(0) @db.Decimal(12, 2)
-  nonComputed      Decimal     @default(0) @db.Decimal(12, 2)
-  exempt           Decimal     @default(0) @db.Decimal(12, 2)
-  vatGeneral       Decimal     @default(0) @db.Decimal(12, 2)
-  vatTransport     Decimal     @default(0) @db.Decimal(12, 2)
-  taxes            Decimal     @default(0) @db.Decimal(12, 2)
-  total            Decimal     @default(0) @db.Decimal(12, 2)
-  balance          Decimal     @default(0) @db.Decimal(12, 2) // saldo pendiente
-  isVoided         Boolean     @default(false)
+
+  // ARCA - Concepto 2=Servicios (turismo); serviceFrom/serviceTo requeridos
+  concept          Int                @default(2)
+  serviceFrom      DateTime?
+  serviceTo        DateTime?
+
+  // Receptor (snapshot al momento de emisión)
+  clientTaxId      String?            // CUIT/DNI del receptor
+  clientTaxPosition TaxPosition?      // condición fiscal del receptor
+
+  // Moneda y cambio
+  currency         Currency           @default(PESOS)
+  exchangeRate     Decimal?           @db.Decimal(10, 4)
+
+  // Importes (mapeo directo a campos ARCA WSFEv1)
+  taxableAmount    Decimal            @default(0) @db.Decimal(12, 2) // ImpNeto (gravado 21%)
+  transportTaxable Decimal            @default(0) @db.Decimal(12, 2) // gravado 10.5% (transporte aéreo nacional)
+  nonComputed      Decimal            @default(0) @db.Decimal(12, 2) // ImpTotConc (no gravado)
+  exempt           Decimal            @default(0) @db.Decimal(12, 2) // ImpOpEx (exento)
+  vatGeneral       Decimal            @default(0) @db.Decimal(12, 2) // IVA 21%
+  vatTransport     Decimal            @default(0) @db.Decimal(12, 2) // IVA 10.5%
+  taxes            Decimal            @default(0) @db.Decimal(12, 2) // ImpTrib (otros tributos)
+  total            Decimal            @default(0) @db.Decimal(12, 2) // ImpTotal
+  balance          Decimal            @default(0) @db.Decimal(12, 2) // saldo pendiente de cobro
+
+  // Estado ARCA (ARCA-ready: de momento LOCAL)
+  authorizationStatus InvoiceAuthStatus @default(LOCAL)
+  cae              String?            // CAE emitido por ARCA
+  caeExpiresAt     DateTime?          // fecha vencimiento CAE
+
+  // Control
+  isVoided         Boolean            @default(false)
   voidedAt         DateTime?
-  creditNoteFor    String? // invoice.id al que referencia la NC
-  createdAt        DateTime    @default(now())
+  creditNoteFor    String?            // invoice.id al que referencia la NC
+  createdAt        DateTime           @default(now())
   createdBy        String?
 
   agency       Agency        @relation(fields: [agencyId], references: [id])
+  salePointRel SalePoint     @relation(fields: [salePointId], references: [id])
   reservation  Reservation?  @relation(fields: [reservationId], references: [id])
   client       Client        @relation(fields: [clientId], references: [id])
   items        InvoiceItem[]
   receiptItems ReceiptItem[]
 
-  @@unique([agencyId, salePoint, type, number])
+  @@unique([agencyId, salePoint, letter, type, number])
   @@map("invoices")
 }
 
@@ -896,6 +957,19 @@ enum InvoiceType {
   FA // Factura
   ND // Nota de Débito
   NC // Nota de Crédito
+}
+
+enum InvoiceLetter {
+  A // RI → RI (IVA discriminado, ARCA código 1/2/3)
+  B // RI → CF/MO/EX/NC (IVA incluido, ARCA código 6/7/8)
+}
+
+enum InvoiceAuthStatus {
+  LOCAL      // emitida localmente, no enviada a ARCA (estado actual)
+  PENDING    // enviada a ARCA, esperando respuesta
+  AUTHORIZED // CAE recibido y válido
+  REJECTED   // rechazada por ARCA (errores de validación)
+  FAILED     // error técnico en comunicación
 }
 
 model InvoiceItem {

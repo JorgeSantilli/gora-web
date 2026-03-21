@@ -39,8 +39,8 @@ Sistema original operativo en Mendoza, Argentina. Empresa: GORA Turismo.
 5. ✅ **Programas/Itinerarios** — paquetes turísticos con 7 tipos de servicio
 6. ✅ **Reservas** — módulo core completo (encabezado + 8 tipos de servicio + importes fiscales + estados)
 7. ✅ **Tarifas y Costos** — Costos de prestadores, Tarifas de Venta, Tarifas de Programa; `details: Json` con editor dinámico por serviceType
-8. 🚧 **Facturación** — próximo módulo a desarrollar; facturas A/B, ND, NC con IVA ARCA
-9. Ingreso de Valores — recibos, cheques, billetes
+8. ✅ **Facturación** — FA/ND/NC letra A/B auto por cond. fiscal, multi-PV, IVA turismo (21%/10.5%/exento/no-comp.), ARCA-ready (schema + enums + SalePoint + InvoiceSequence), NC sobre FA, anulación
+9. 🚧 **Ingreso de Valores** — próximo; recibos, cheques, billetes
 10. Órdenes de Pago
 11. Cajas Diarias
 12. IVA — libro ventas y compras (normativa ARCA)
