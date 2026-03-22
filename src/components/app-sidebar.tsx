@@ -55,6 +55,12 @@ const navGroups = [
     ],
   },
   {
+    label: "Reportes",
+    items: [
+      { title: "Reportes", href: "reportes", icon: "📋" },
+    ],
+  },
+  {
     label: "Configuración",
     items: [
       { title: "Tarifas", href: "tarifas", icon: "💲" },
